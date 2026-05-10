@@ -17,7 +17,9 @@ A simple configurable item filter block for Minecraft Fabric.
 
 ## Features
 
-- Pulls From Above | Can pull items from inventories placed above, like chests, barrels, furnaces, smokers, and more.
+- Pulls from inventories placed above, like chests, barrels, furnaces, smokers, and more.
+- Correctly pulls items from large chests and trapped large chests.
+- Can pick up dropped items from above, like a vanilla hopper.
 - Hopper-like item transfer
 - Configurable filter slots
 - Toggleable filter mode
@@ -41,7 +43,7 @@ Inside the GUI:
 
 Place the Item Filter like a hopper.
 
-Items can enter from the top through hoppers or be pulled directly from inventories placed above the Item Filter.
+Items can enter from the top through hoppers, be pulled directly from inventories above, or be picked up as dropped items above the Item Filter.
 
 Items leave through the direction the block is facing.
 

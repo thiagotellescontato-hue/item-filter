@@ -1,7 +1,9 @@
 package net.thbtt.itemfilter.block.entity;
 
 import net.minecraft.block.BlockState;
+import net.minecraft.block.InventoryProvider;
 import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.inventory.Inventories;
@@ -16,9 +18,13 @@ import net.minecraft.screen.ScreenHandler;
 import net.minecraft.text.Text;
 import net.minecraft.util.collection.DefaultedList;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Direction;
 import net.thbtt.itemfilter.block.ItemFilterBlock;
 import net.thbtt.itemfilter.screen.ItemFilterScreenHandler;
+import net.minecraft.block.ChestBlock;
+
+import java.util.List;
 
 public class ItemFilterBlockEntity extends BlockEntity implements SidedInventory, NamedScreenHandlerFactory {
     private final DefaultedList<ItemStack> inventory = DefaultedList.ofSize(10, ItemStack.EMPTY);
@@ -27,6 +33,9 @@ public class ItemFilterBlockEntity extends BlockEntity implements SidedInventory
 
     private boolean filterEnabled = true;
     private int transferCooldown = 0;
+
+    // -1 means "choose an initial slot based on block position"
+    private int pullSlotCursor = -1;
 
     private final PropertyDelegate propertyDelegate = new PropertyDelegate() {
         @Override
@@ -78,16 +87,26 @@ public class ItemFilterBlockEntity extends BlockEntity implements SidedInventory
 
         boolean moved = false;
 
-        // Primeiro tenta mandar itens que já estão dentro do filtro.
+        // First, try to output items already inside the Item Filter.
         if (blockEntity.tryMoveItemsOut(state)) {
             moved = true;
         }
 
-        // Depois tenta puxar do inventário acima.
+        // Then, try to pull from the inventory above.
         if (blockEntity.tryPullItemsFromAbove()) {
             moved = true;
 
-            // Se puxou um item, tenta mandar para a saída no mesmo tick.
+            // If it pulled an item, try to output it in the same tick.
+            if (blockEntity.tryMoveItemsOut(state)) {
+                moved = true;
+            }
+        }
+
+        // Finally, try to pull dropped item entities above the filter.
+        if (blockEntity.tryPullDroppedItemsAbove()) {
+            moved = true;
+
+            // If it pulled a dropped item, try to output it in the same tick.
             if (blockEntity.tryMoveItemsOut(state)) {
                 moved = true;
             }
@@ -99,15 +118,47 @@ public class ItemFilterBlockEntity extends BlockEntity implements SidedInventory
         }
     }
 
+    private Inventory getInventoryAt(BlockPos targetPos) {
+        if (world == null) {
+            return null;
+        }
+
+        BlockState targetState = world.getBlockState(targetPos);
+
+        if (targetState.getBlock() instanceof ChestBlock chestBlock) {
+            Inventory chestInventory = ChestBlock.getInventory(chestBlock, targetState, world, targetPos, true);
+
+            if (chestInventory != null) {
+                return chestInventory;
+            }
+        }
+
+        if (targetState.getBlock() instanceof InventoryProvider inventoryProvider) {
+            Inventory inventory = inventoryProvider.getInventory(targetState, world, targetPos);
+
+            if (inventory != null) {
+                return inventory;
+            }
+        }
+
+        BlockEntity blockEntity = world.getBlockEntity(targetPos);
+
+        if (blockEntity instanceof Inventory inventory) {
+            return inventory;
+        }
+
+        return null;
+    }
+
     private boolean tryMoveItemsOut(BlockState state) {
         if (world == null) {
             return false;
         }
 
         Direction outputDirection = state.get(ItemFilterBlock.FACING);
-        BlockEntity targetBlockEntity = world.getBlockEntity(pos.offset(outputDirection));
+        Inventory targetInventory = getInventoryAt(pos.offset(outputDirection));
 
-        if (!(targetBlockEntity instanceof Inventory targetInventory)) {
+        if (targetInventory == null) {
             return false;
         }
 
@@ -138,29 +189,78 @@ public class ItemFilterBlockEntity extends BlockEntity implements SidedInventory
             return false;
         }
 
-        BlockEntity sourceBlockEntity = world.getBlockEntity(pos.up());
+        Inventory sourceInventory = getInventoryAt(pos.up());
 
-        if (!(sourceBlockEntity instanceof Inventory sourceInventory)) {
+        if (sourceInventory == null) {
             return false;
         }
 
         Direction extractSide = Direction.DOWN;
 
         if (sourceInventory instanceof SidedInventory sidedInventory) {
-            for (int slot : sidedInventory.getAvailableSlots(extractSide)) {
-                if (tryPullFromSlot(sourceInventory, slot, extractSide)) {
-                    return true;
-                }
-            }
-        } else {
-            for (int slot = 0; slot < sourceInventory.size(); slot++) {
-                if (tryPullFromSlot(sourceInventory, slot, extractSide)) {
-                    return true;
-                }
+            int[] availableSlots = sidedInventory.getAvailableSlots(extractSide);
+            return tryPullFromSlotList(sourceInventory, availableSlots, extractSide);
+        }
+
+        return tryPullFromRegularInventory(sourceInventory, extractSide);
+    }
+
+    private boolean tryPullFromRegularInventory(Inventory sourceInventory, Direction side) {
+        int size = sourceInventory.size();
+
+        if (size <= 0) {
+            return false;
+        }
+
+        int startSlot = getStartSlot(size);
+
+        for (int i = 0; i < size; i++) {
+            int slot = (startSlot + i) % size;
+
+            if (tryPullFromSlot(sourceInventory, slot, side)) {
+                pullSlotCursor = (slot + 1) % size;
+                markDirty();
+                return true;
             }
         }
 
         return false;
+    }
+
+    private boolean tryPullFromSlotList(Inventory sourceInventory, int[] slots, Direction side) {
+        if (slots.length == 0) {
+            return false;
+        }
+
+        int startIndex = getStartSlot(slots.length);
+
+        for (int i = 0; i < slots.length; i++) {
+            int slotIndex = (startIndex + i) % slots.length;
+            int slot = slots[slotIndex];
+
+            if (tryPullFromSlot(sourceInventory, slot, side)) {
+                pullSlotCursor = (slotIndex + 1) % slots.length;
+                markDirty();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private int getStartSlot(int size) {
+        if (size <= 0) {
+            return 0;
+        }
+
+        if (pullSlotCursor >= 0) {
+            return Math.floorMod(pullSlotCursor, size);
+        }
+
+        // Different Item Filters below the same double chest will start searching
+        // from different slots instead of all starting from slot 0.
+        int positionOffset = pos.getX() * 31 + pos.getY() * 17 + pos.getZ();
+        return Math.floorMod(positionOffset, size);
     }
 
     private boolean tryPullFromSlot(Inventory sourceInventory, int slot, Direction side) {
@@ -198,6 +298,63 @@ public class ItemFilterBlockEntity extends BlockEntity implements SidedInventory
         sourceInventory.markDirty();
         markDirty();
 
+        return true;
+    }
+
+    private boolean tryPullDroppedItemsAbove() {
+        if (world == null) {
+            return false;
+        }
+
+        Box box = new Box(
+                pos.getX(), pos.getY() + 1.0, pos.getZ(),
+                pos.getX() + 1.0, pos.getY() + 2.0, pos.getZ() + 1.0
+        );
+
+        List<ItemEntity> itemEntities = world.getEntitiesByClass(
+                ItemEntity.class,
+                box,
+                itemEntity -> itemEntity.isAlive() && !itemEntity.getStack().isEmpty()
+        );
+
+        for (ItemEntity itemEntity : itemEntities) {
+            if (tryPullFromItemEntity(itemEntity)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean tryPullFromItemEntity(ItemEntity itemEntity) {
+        ItemStack entityStack = itemEntity.getStack();
+
+        if (entityStack.isEmpty()) {
+            return false;
+        }
+
+        if (!canAcceptItem(entityStack)) {
+            return false;
+        }
+
+        ItemStack stackToMove = entityStack.copy();
+        stackToMove.setCount(1);
+
+        ItemStack remainingStack = insertIntoInventory(this, stackToMove, Direction.UP);
+
+        if (!remainingStack.isEmpty()) {
+            return false;
+        }
+
+        entityStack.decrement(1);
+
+        if (entityStack.isEmpty()) {
+            itemEntity.discard();
+        } else {
+            itemEntity.setStack(entityStack);
+        }
+
+        markDirty();
         return true;
     }
 
@@ -388,6 +545,7 @@ public class ItemFilterBlockEntity extends BlockEntity implements SidedInventory
 
         Inventories.writeNbt(nbt, inventory, registryLookup);
         nbt.putBoolean("FilterEnabled", filterEnabled);
+        nbt.putInt("PullSlotCursor", pullSlotCursor);
     }
 
     @Override
@@ -399,5 +557,7 @@ public class ItemFilterBlockEntity extends BlockEntity implements SidedInventory
         if (nbt.contains("FilterEnabled")) {
             filterEnabled = nbt.getBoolean("FilterEnabled");
         }
+
+        pullSlotCursor = nbt.contains("PullSlotCursor") ? nbt.getInt("PullSlotCursor") : -1;
     }
 }
