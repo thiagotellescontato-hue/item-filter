@@ -1,0 +1,10 @@
+{
+  "block.itemfilter.item_filter": "Item Filter",
+  "screen.itemfilter.mode": "Mode:",
+  "screen.itemfilter.filter": "Filter",
+  "screen.itemfilter.items": "Items",
+  "screen.itemfilter.filter_on": "ON",
+  "screen.itemfilter.filter_off": "OFF",
+  "tooltip.itemfilter.item_filter.line1": "Filters items when enabled.",
+  "tooltip.itemfilter.item_filter.line2": "Right-click to configure."
+}

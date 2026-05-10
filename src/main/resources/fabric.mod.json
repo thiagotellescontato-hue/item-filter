@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "itemfilter",
+  "version": "${version}",
+  "name": "Item Filter",
+  "description": "Adds a configurable item filter block that works like a hopper with filter slots and a toggleable filter mode.",
+  "authors": [
+    "ThBTT"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/itemfilter/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "net.thbtt.itemfilter.ItemFilter"
+    ],
+    "client": [
+      "net.thbtt.itemfilter.ItemFilterClient"
+    ]
+  },
+  "mixins": [
+    "itemfilter.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}

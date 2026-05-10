@@ -1,0 +1,10 @@
+{
+  "block.itemfilter.item_filter": "Filtro de Itens",
+  "screen.itemfilter.mode": "Modo:",
+  "screen.itemfilter.filter": "Filtro",
+  "screen.itemfilter.items": "Itens",
+  "screen.itemfilter.filter_on": "ON",
+  "screen.itemfilter.filter_off": "OFF",
+  "tooltip.itemfilter.item_filter.line1": "Filtra itens quando ativado.",
+  "tooltip.itemfilter.item_filter.line2": "Clique com botão direito para configurar."
+}
