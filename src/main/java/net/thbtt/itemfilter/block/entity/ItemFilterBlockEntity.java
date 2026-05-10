@@ -76,7 +76,24 @@ public class ItemFilterBlockEntity extends BlockEntity implements SidedInventory
             return;
         }
 
+        boolean moved = false;
+
+        // Primeiro tenta mandar itens que já estão dentro do filtro.
         if (blockEntity.tryMoveItemsOut(state)) {
+            moved = true;
+        }
+
+        // Depois tenta puxar do inventário acima.
+        if (blockEntity.tryPullItemsFromAbove()) {
+            moved = true;
+
+            // Se puxou um item, tenta mandar para a saída no mesmo tick.
+            if (blockEntity.tryMoveItemsOut(state)) {
+                moved = true;
+            }
+        }
+
+        if (moved) {
             blockEntity.transferCooldown = 8;
             blockEntity.markDirty();
         }
@@ -114,6 +131,74 @@ public class ItemFilterBlockEntity extends BlockEntity implements SidedInventory
         }
 
         return false;
+    }
+
+    private boolean tryPullItemsFromAbove() {
+        if (world == null) {
+            return false;
+        }
+
+        BlockEntity sourceBlockEntity = world.getBlockEntity(pos.up());
+
+        if (!(sourceBlockEntity instanceof Inventory sourceInventory)) {
+            return false;
+        }
+
+        Direction extractSide = Direction.DOWN;
+
+        if (sourceInventory instanceof SidedInventory sidedInventory) {
+            for (int slot : sidedInventory.getAvailableSlots(extractSide)) {
+                if (tryPullFromSlot(sourceInventory, slot, extractSide)) {
+                    return true;
+                }
+            }
+        } else {
+            for (int slot = 0; slot < sourceInventory.size(); slot++) {
+                if (tryPullFromSlot(sourceInventory, slot, extractSide)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private boolean tryPullFromSlot(Inventory sourceInventory, int slot, Direction side) {
+        ItemStack sourceStack = sourceInventory.getStack(slot);
+
+        if (sourceStack.isEmpty()) {
+            return false;
+        }
+
+        if (sourceInventory instanceof SidedInventory sidedInventory) {
+            if (!sidedInventory.canExtract(slot, sourceStack, side)) {
+                return false;
+            }
+        }
+
+        if (!canAcceptItem(sourceStack)) {
+            return false;
+        }
+
+        ItemStack stackToMove = sourceStack.copy();
+        stackToMove.setCount(1);
+
+        ItemStack remainingStack = insertIntoInventory(this, stackToMove, Direction.UP);
+
+        if (!remainingStack.isEmpty()) {
+            return false;
+        }
+
+        sourceStack.decrement(1);
+
+        if (sourceStack.isEmpty()) {
+            sourceInventory.setStack(slot, ItemStack.EMPTY);
+        }
+
+        sourceInventory.markDirty();
+        markDirty();
+
+        return true;
     }
 
     private static ItemStack insertIntoInventory(Inventory targetInventory, ItemStack stack, Direction side) {
