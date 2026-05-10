@@ -11,6 +11,10 @@ A simple configurable item filter block for Minecraft Fabric.
   Download on Modrinth
 </a>
 
+## Showcase
+
+[![Item Filter Mod Showcase](https://img.youtube.com/vi/oFVMrfMS_e0/maxresdefault.jpg)](https://www.youtube.com/watch?v=oFVMrfMS_e0)
+
 ## Features
 
 - Pulls From Above | Can pull items from inventories placed above, like chests, barrels, furnaces, smokers, and more.
